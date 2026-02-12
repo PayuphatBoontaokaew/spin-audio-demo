@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Card</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f0ece6;
+    --card-bg: #fafaf8;
+    --card-shadow: 0 24px 64px rgba(0,0,0,0.13), 0 4px 16px rgba(0,0,0,0.07);
+    --wave-active: #d4624a;
+    --wave-inactive: #e8d5cb;
+    --text-dark: #1a1410;
+    --text-mid: #7a6a5a;
+    --accent: #d4624a;
+    --radius: 28px;
+    --slot-h: 160px;   /* height of the printer slot opening */
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .scene {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .label-top {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    opacity: 0.7;
+  }
+
+  /* ─── CARD ─────────────────────────────────────────── */
+  .card {
+    width: min(92vw, 420px);
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    /* box-shadow: var(--card-shadow); */
+    overflow: visible;
+    position: relative;
+    padding: 14px 14px 18px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(255,255,255,0.9);
+  }
+
+
+  /* ─── PRINTER SLOT ──────────────────────────────────── */
+  /* 
+    The card has a rectangular slot opening. 
+    The long photo slides horizontally OUT from right side, like paper from a printer.
+    At progress=0: image fully hidden (offset = full width, only slot visible as empty)
+    At progress=1: image has slid fully out to the left (all visible)
+  */
+  .printer-slot {
+    position: relative;
+    width: 100%;
+    height: var(--slot-h);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #1a1614;
+    /* Inset shadow to give depth to the slot */
+    /* box-shadow: inset 0 2px 12px rgba(0,0,0,0.45), inset 0 -1px 4px rgba(0,0,0,0.2); */
+  }
+
+  /* The slot top & bottom edges — thin rubber lips */
+  .printer-slot::before,
+  .printer-slot::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 6px;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .printer-slot::before {
+    top: 0;
+    /* background: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), transparent); */
+    border-radius: 14px 14px 0 0;
+  }
+  .printer-slot::after {
+    bottom: 0;
+    /* background: linear-gradient(to top,rgba(255, 255, 255, 0.5), transparent); */
+    border-radius: 0 0 14px 14px;
+  }
+
+  /* Paper feed rollers — subtle dots on left edge */
+  .slot-roller {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .slot-roller span {
+    display: block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    /* background: radial-gradient(circle at 35% 35%, #555, #1a1a1a); */
+    /* box-shadow: 0 1px 3px rgba(0,0,0,0.6); */
+  }
+
+  .photo-strip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;        /* ← เปลี่ยน */
+    display: flex;
+    align-items: stretch;
+    will-change: right;
+    z-index: 3;
+  }
+
+  .photo-strip img {
+    height: 100%;
+    width: auto;              /* ← แก้ตรงนี้ */
+    display: block;
+    filter: saturate(0.9) brightness(0.95);
+  }
+
+  /* Sheen / gloss effect on the photo */
+  .photo-sheen {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 70%,
+      rgba(255,255,255,0.06) 50%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* Leading edge of paper — bright crease line */
+  .paper-edge {
+    position: absolute;
+    top: 0; bottom: 0;
+    right: 0;
+    width: 3px;
+    background: linear-gradient(to right, rgba(255,255,255,0.0), rgba(255,255,255,0.35), rgba(255,255,255,0.0));
+    z-index: 4;
+  }
+
+  /* Dark "inside the machine" fill before paper appears */
+  .slot-void {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 80% 50%, #2a2018 0%, #0d0a08 100%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Slot text hint */
+  .slot-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slot-hint span {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.22);
+  }
+
+  /* ─── WAVEFORM + PIN AREA ───────────────────────────── */
+  .waveform-wrapper {
+    position: relative;
+    margin-top: 14px;
+    height: 54px;
+    display: flex;
+    align-items: center;
+  }
+
+  .waveform-canvas {
+    width: 100%;
+    height: 54px;
+    display: block;
+  }
+
+  .playhead {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+    border-radius: 1px;
+    left: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  /* ─── PIN ───────────────────────────────────────────── */
+  .pin-container {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px;
+    height: 56px;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.25));
+  }
+  .pin-container:active { cursor: grabbing; }
+
+  .pin-svg {
+    width: 56px;
+    height: 56px;
+    will-change: transform;
+  }
+
+  /* ─── PROGRESS RING ─────────────────────────────────── */
+  .progress-ring-wrap {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 56px; height: 56px;
+    pointer-events: none;
+    z-index: 9;
+  }
+  .progress-ring-wrap svg {
+    width: 56px; height: 56px;
+    transform: rotate(-90deg);
+  }
+  .ring-track { fill: none; stroke: rgba(0,0,0,0.06); stroke-width: 3; }
+  .ring-fill {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 150.8;
+    stroke-dashoffset: 150.8;
+    transition: stroke-dashoffset 0.05s linear;
+  }
+
+  /* ─── BOTTOM INFO ───────────────────────────────────── */
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 36px;
+    padding: 0 2px;
+  }
+
+  .memory-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 17px;
+    color: var(--text-dark);
+    line-height: 1.2;
+  }
+
+  .memory-sub {
+    font-size: 11px;
+    color: var(--text-mid);
+    margin-top: 2px;
+    letter-spacing: 0.02em;
+  }
+
+  .play-state {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .play-state .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.75); }
+  }
+
+  /* ─── HINT ─────────────────────────────── */
+  .hint {
+    font-size: 11px;
+    color: var(--text-mid);
+    letter-spacing: 0.08em;
+    opacity: 0.65;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: opacity 0.5s;
+  }
+  .hint svg { flex-shrink: 0; }
+
+  @media (max-width: 400px) {
+    .card { width: 290px; }
+  }
+</style>
+</head>
+<body>
+<div class="scene">
+  <span class="label-top">Memory Card</span>
+
+  <div class="card" id="card">
+
+    <!-- Printer Slot -->
+    <div class="printer-slot" id="printerSlot">
+      <div class="slot-void"></div>
+
+      <div class="slot-roller">
+        <span></span><span></span><span></span>
+      </div>
+
+      <div class="slot-hint" id="slotHint">
+        <span>Wind to print</span>
+      </div>
+
+      <div class="photo-strip" id="photoStrip">
+        <img 
+          id="cardPhoto"
+          src="im.png"
+          alt="Memory photo"
+          draggable="false"
+        />
+        <div class="photo-sheen"></div>
+        <div class="paper-edge" id="paperEdge"></div>
+      </div>
+    </div>
+
+    <!-- Waveform -->
+    <div class="waveform-wrapper">
+      <canvas class="waveform-canvas" id="waveCanvas"></canvas>
+      <div class="playhead" id="playhead"></div>
+    </div>
+
+    <!-- Pin progress ring -->
+    <div class="progress-ring-wrap">
+      <svg viewBox="0 0 56 56">
+        <circle class="ring-track" cx="28" cy="28" r="24"/>
+        <circle class="ring-fill" id="ringFill" cx="28" cy="28" r="24"/>
+      </svg>
+    </div>
+
+    <!-- Winding pin -->
+    <div class="pin-container" id="pinContainer">
+      <svg class="pin-svg" id="pinSvg" viewBox="0 0 56 56" fill="none">
+        <circle cx="28" cy="28" r="23" fill="url(#metalRing)" stroke="url(#ringStroke)" stroke-width="1.5"/>
+        <circle cx="28" cy="28" r="16" fill="url(#innerDisc)"/>
+        <line x1="28" y1="13" x2="28" y2="20" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="28" y1="36" x2="28" y2="43" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="13" y1="28" x2="20" y2="28" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="36" y1="28" x2="43" y2="28" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="17.5" y1="17.5" x2="22.5" y2="22.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="38.5" y1="38.5" x2="33.5" y2="33.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="38.5" y1="17.5" x2="33.5" y2="22.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="17.5" y1="38.5" x2="22.5" y2="33.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="28" cy="28" r="3.5" fill="url(#centerDot)"/>
+        <circle cx="28" cy="15" r="2.5" fill="rgba(255,255,255,0.7)"/>
+        <defs>
+          <radialGradient id="metalRing" cx="35%" cy="30%">
+            <stop offset="0%" stop-color="#e8c880"/>
+            <stop offset="40%" stop-color="#c8a052"/>
+            <stop offset="100%" stop-color="#8a6030"/>
+          </radialGradient>
+          <linearGradient id="ringStroke" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f0d090"/>
+            <stop offset="100%" stop-color="#705020"/>
+          </linearGradient>
+          <radialGradient id="innerDisc" cx="40%" cy="30%">
+            <stop offset="0%" stop-color="#d4a858"/>
+            <stop offset="60%" stop-color="#b08030"/>
+            <stop offset="100%" stop-color="#7a5520"/>
+          </radialGradient>
+          <radialGradient id="centerDot" cx="30%" cy="30%">
+            <stop offset="0%" stop-color="#f0e0a0"/>
+            <stop offset="100%" stop-color="#a07030"/>
+          </radialGradient>
+        </defs>
+      </svg>
+    </div>
+
+    <!-- Footer -->
+    <div class="card-footer">
+      <div>
+        <div class="memory-title">payu & aumim</div>
+        <div class="memory-sub">Voice note · 0:47</div>
+      </div>
+      <div class="play-state" id="playState">
+        <div class="dot"></div>
+        <span>Playing</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="hint" id="hint">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 2C7 2 10 5 10 7C10 8.657 8.657 10 7 10C5.343 10 4 8.657 4 7C4 5.343 5.343 4 7 4" stroke="#7a6a5a" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M7 10V12.5M5.5 12.5H8.5" stroke="#7a6a5a" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    Drag the pin clockwise to print
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const pinContainer = document.getElementById('pinContainer');
+  const pinSvg       = document.getElementById('pinSvg');
+  const waveCanvas   = document.getElementById('waveCanvas');
+  const playhead     = document.getElementById('playhead');
+  const playState    = document.getElementById('playState');
+  const ringFill     = document.getElementById('ringFill');
+  const hint         = document.getElementById('hint');
+  const photoStrip   = document.getElementById('photoStrip');
+  const slotHint     = document.getElementById('slotHint');
+  const paperEdge    = document.getElementById('paperEdge');
+  const ctx = waveCanvas.getContext('2d');
+
+  // ── Constants ─────────────────────────────────────
+  const FULL_WIND = 360;   // degrees for full reveal
+  const CIRCUMFERENCE = 2 * Math.PI * 24; // ~150.8
+
+  // ── State ─────────────────────────────────────────
+  let pinAngle   = 0;
+  let progress   = 0;
+  let isDragging = false;
+  let lastAngle  = null;
+  let totalTurns = 0;
+  let physicsVel = 0;
+  let animFrame  = null;
+  let isUnlocked = false;
+  let isPlaying  = false;
+  let audioCtx, gainNode, oscillators = [];
+  let playheadRaf = null;
+  let playStart   = null;
+
+  // Waveform
+  const waveData = generateWaveData(80);
+  resizeCanvas();
+  window.addEventListener('resize', () => { resizeCanvas(); drawWave(progress); });
+  drawWave(0);
+  updateRing(0);
+
+  // ── Waveform ──────────────────────────────────────
+  function generateWaveData(count) {
+    const d = [];
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
+      const base  = 0.2 + 0.6 * Math.sin(t * Math.PI);
+      const noise = 0.15 * Math.sin(i * 2.3) + 0.1 * Math.sin(i * 5.7) + 0.08 * Math.sin(i * 11.2);
+      d.push(Math.max(0.05, Math.min(1, base + noise)));
+    }
+    return d;
+  }
+
+  function resizeCanvas() {
+    const rect = waveCanvas.parentElement.getBoundingClientRect();
+    waveCanvas.width  = rect.width * devicePixelRatio;
+    waveCanvas.height = 54 * devicePixelRatio;
+    waveCanvas.style.width  = rect.width + 'px';
+    waveCanvas.style.height = '54px';
+  }
+
+  function drawWave(prog, playFrac) {
+    const W = waveCanvas.width, H = waveCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const barCount = waveData.length;
+    const gap  = 2 * devicePixelRatio;
+    const barW = (W - gap * (barCount - 1)) / barCount;
+    const maxH = H * 0.85;
+    const midY = H / 2;
+    const splitIdx = Math.floor((playFrac !== undefined ? playFrac : 0) * barCount);
+
+    for (let i = 0; i < barCount; i++) {
+      const h   = waveData[i] * maxH;
+      const x   = i * (barW + gap);
+      const bH  = Math.max(3 * devicePixelRatio, h);
+      const r   = barW / 2;
+      const y   = midY - bH / 2;
+
+      if (!isUnlocked) {
+        // Wind-coloring: fill bars proportionally to wind progress
+        const threshold = prog * barCount;
+        if (i < threshold) {
+          ctx.fillStyle = `rgba(212,98,74,${0.75 + 0.25 * waveData[i]})`;
+        } else {
+          ctx.fillStyle = '#e8d5cb';
+        }
+      } else {
+        // Playhead-coloring
+        if (i < splitIdx) {
+          ctx.fillStyle = `rgba(180,60,40,0.9)`;
+        } else {
+          ctx.fillStyle = `rgba(212,98,74,${0.55 + 0.45 * waveData[i]})`;
+        }
+      }
+
+      ctx.beginPath();
+      ctx.roundRect(x, y, barW, bH, r);
+      ctx.fill();
+    }
+
+    if (isUnlocked && playFrac !== undefined) {
+      const pxX = playFrac * waveCanvas.offsetWidth;
+      playhead.style.left = pxX + 'px';
+    }
+  }
+
+  // ── Photo strip position ───────────────────────────
+  // p=0 → fully hidden to the right (right: -STRIP_W = "right:-900px")
+  // p=1 → fully slid out left (right: card_width - STRIP_W)
+  // We animate `right` of the strip from -STRIP_W to (slotWidth - STRIP_W)
+  // Which means the strip's right edge goes from outside-right to inside-left
+  // The visible window is the printer-slot itself (overflow:hidden)
+
+  function setStripPosition(p) {
+    const eased = easeInOutQuad(p);
+
+    const slotEl  = document.querySelector('.printer-slot');
+    const slotW   = slotEl.offsetWidth;
+
+    const stripW  = photoStrip.scrollWidth;   // ← width จริงของรูป
+
+    const startRight = -stripW;
+    const endRight   = slotW - stripW;
+
+    const curRight = startRight + (endRight - startRight) * eased;
+    photoStrip.style.right = curRight + 'px';
+
+    paperEdge.style.opacity = Math.max(0, 1 - p * 4);
+    slotHint.style.opacity  = Math.max(0, 1 - p * 5);
+  }
+
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+
+  function getAngle(cx, cy, px, py) {
+    return Math.atan2(py - cy, px - cx) * 180 / Math.PI;
+  }
+
+  function getPinCenter() {
+    const r = pinContainer.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  function pointerStart(e) {
+    e.preventDefault();
+    isDragging = true;
+    const pt   = e.touches ? e.touches[0] : e;
+    const c    = getPinCenter();
+    lastAngle  = getAngle(c.x, c.y, pt.clientX, pt.clientY);
+    physicsVel = 0;
+    if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    hint.style.opacity = '0';
+    if (!audio.paused) return;
+  startAudio();
+  }
+
+  function pointerMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const pt   = e.touches ? e.touches[0] : e;
+    const c    = getPinCenter();
+    const curr = getAngle(c.x, c.y, pt.clientX, pt.clientY);
+    let delta = curr - lastAngle;
+    if (delta >  180) delta -= 360;
+    if (delta < -180) delta += 360;
+    lastAngle  = curr;
+    physicsVel = delta;
+    totalTurns = Math.max(0, Math.min(FULL_WIND * 1.02, totalTurns + delta));
+    progress   = Math.min(1, Math.max(0, totalTurns / FULL_WIND));
+    pinAngle  += delta;
+    applyProgress(progress);
+    pinSvg.style.transform = `rotate(${pinAngle}deg)`;
+    updateRing(progress);
+    drawWave(progress);
+    setStripPosition(progress);
+  }
+
+  function pointerEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    let coast  = physicsVel;
+    function coastAnim() {
+      coast *= 0.88;
+      if (Math.abs(coast) < 0.3) coast = 0;
+      if (coast !== 0) {
+        totalTurns = Math.max(0, Math.min(FULL_WIND * 1.02, totalTurns + coast));
+        progress   = Math.min(1, Math.max(0, totalTurns / FULL_WIND));
+        pinAngle  += coast;
+        applyProgress(progress);
+        pinSvg.style.transform = `rotate(${pinAngle}deg)`;
+        updateRing(progress);
+        drawWave(progress);
+        setStripPosition(progress);
+        animFrame = requestAnimationFrame(coastAnim);
+      } else {
+        animFrame = null;
+      }
+    }
+    animFrame = requestAnimationFrame(coastAnim);
+  }
+
+  pinContainer.addEventListener('mousedown',  pointerStart, { passive: false });
+  pinContainer.addEventListener('touchstart', pointerStart, { passive: false });
+  document.addEventListener('mousemove',      pointerMove,  { passive: false });
+  document.addEventListener('touchmove',      pointerMove,  { passive: false });
+  document.addEventListener('mouseup',        pointerEnd);
+  document.addEventListener('touchend',       pointerEnd);
+
+  // ── Progress → visuals ────────────────────────────
+  function applyProgress(p) {
+    if (p >= 1 && !isUnlocked) {
+      isUnlocked = true;
+      playhead.style.opacity  = '1';
+      playState.style.opacity = '1';
+      startAudio();
+      animatePlayhead();
+    } else if (p < 1 && isUnlocked) {
+      isUnlocked = false;
+      playState.style.opacity = '0';
+      stopAudio();
+      playhead.style.opacity  = '0';
+      stopPlayheadAnim();
+    }
+  }
+
+  // ── Ring ──────────────────────────────────────────
+  function updateRing(p) {
+    ringFill.style.strokeDashoffset = CIRCUMFERENCE * (1 - p);
+  }
+
+  // ── Playhead ──────────────────────────────────────
+  const NOTE_DUR = 8000;
+
+  function animatePlayhead() {
+    function step(ts) {
+      if (!playStart) playStart = ts;
+      const frac = Math.min(1, (ts - playStart) / NOTE_DUR);
+      drawWave(1, frac);
+      if (frac < 1 && isUnlocked) {
+        playheadRaf = requestAnimationFrame(step);
+      } else if (frac >= 1 && isUnlocked) {
+        playStart = null;
+        playheadRaf = requestAnimationFrame(step);
+      }
+    }
+    playheadRaf = requestAnimationFrame(step);
+  }
+
+  function stopPlayheadAnim() {
+    if (playheadRaf) { cancelAnimationFrame(playheadRaf); playheadRaf = null; }
+    playStart = null;
+  }
+
+  // ── Audio (MP3 Version) ─────────────────────────
+
+  const audio = new Audio('munvoice.wav'); // ต้องมีไฟล์นี้จริง
+  audio.loop = true;
+  audio.preload = "auto";
+
+  function startAudio() {
+    audio.play().catch(() => {});
+  }
+
+  function stopAudio() {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+
+  // Init strip hidden
+  setStripPosition(1);
+  progress = 1;
+
+})();
+</script>
+</body>
+</html>
